@@ -74,6 +74,74 @@ def draw_panel(canvas, matrix, x0, y0, color, grid=True):
     return pw, ph
 
 
+def draw_gray_panel(canvas, values, x0, y0):
+    """把 0~1 的灰度矩阵画成面板（白→蓝渐变），用于展示卷积模糊后的灰度"""
+    h, w = len(values), len(values[0])
+    pw, ph = w * CELL, h * CELL
+
+    for y in range(y0 - 2, y0 + ph + 2):
+        for x in range(x0 - 2, x0 + pw + 2):
+            if 0 <= y < len(canvas) and 0 <= x < len(canvas[0]):
+                canvas[y][x] = PANEL_BG
+
+    for r in range(h):
+        for c in range(w):
+            v = max(0.0, min(1.0, values[r][c]))
+            color = (int(255 - 211 * v), int(255 - 144 * v), int(255 - 68 * v))
+            for dy in range(CELL):
+                row = canvas[y0 + r * CELL + dy]
+                for dx in range(CELL):
+                    row[x0 + c * CELL + dx] = color
+
+    for c in range(w + 1):
+        x = x0 + c * CELL
+        for y in range(y0, y0 + ph):
+            if x < len(canvas[0]):
+                canvas[y][x] = GRID
+    for r in range(h + 1):
+        y = y0 + r * CELL
+        if y < len(canvas):
+            for x in range(x0, x0 + pw):
+                canvas[y][x] = GRID
+    return pw, ph
+
+
+def conv_sum(matrix, k=3):
+    """k×k 全 1 核的卷积（零填充），返回每格的邻域和；除以 k*k 就是均值模糊"""
+    h, w = len(matrix), len(matrix[0])
+    half = k // 2
+    out = [[0] * w for _ in range(h)]
+    for r in range(h):
+        for c in range(w):
+            s = 0
+            for dr in range(-half, half + 1):
+                for dc in range(-half, half + 1):
+                    rr, cc = r + dr, c + dc
+                    if 0 <= rr < h and 0 <= cc < w:
+                        s += matrix[rr][cc]
+            out[r][c] = s
+    return out
+
+
+def compose_mixed(panels, path):
+    """panels: [('bin', matrix[, color]) | ('gray', values), ...] 横向排布"""
+    widths = [(len(p[1][0]) * CELL) for p in panels]
+    heights = [(len(p[1]) * CELL) for p in panels]
+    total_w = MARGIN * 2 + sum(widths) + GAP * (len(panels) - 1)
+    total_h = MARGIN * 2 + max(heights)
+    canvas = new_canvas(total_w, total_h)
+    x = MARGIN
+    for p, w in zip(panels, widths):
+        if p[0] == 'gray':
+            draw_gray_panel(canvas, p[1], x, MARGIN)
+        else:
+            color = p[2] if len(p) > 2 else FG
+            draw_panel(canvas, p[1], x, MARGIN, color)
+        x += w + GAP
+    write_png(path, total_w, total_h, canvas)
+    return total_w, total_h
+
+
 def parse_matrices(text):
     """从演示输出里收集所有矩阵，返回 [(标签, matrix), ...]"""
     out = []
@@ -168,6 +236,25 @@ def main():
         p = os.path.join(outdir, 'fig4_erode.png')
         compose([(src, FG_ALT), (er_src, FG)], p)
         made.append(p)
+
+    # 图5：同一个 3x3 窗口 —— 卷积模糊 vs 形态学膨胀
+    if inp and out3:
+        sums = conv_sum(inp, 3)
+        mean = [[v / 9.0 for v in row] for row in sums]
+        thresh = [[1 if v > 0 else 0 for v in row] for row in sums]
+        p = os.path.join(outdir, 'fig5_conv_vs_dilate.png')
+        compose_mixed([('bin', inp, FG_ALT), ('gray', mean), ('bin', thresh, FG)], p)
+        made.append(p)
+
+        same = all(thresh[r][c] == out3[r][c]
+                   for r in range(len(out3)) for c in range(len(out3[0])))
+        erode3 = sum(1 for row in sums for v in row if v == 9)
+        from collections import Counter
+        dist = dict(sorted(Counter(v for row in sums for v in row).items()))
+        print('\n--- 卷积与形态学的对账 ---')
+        print(f'3x3 全 1 核卷积邻域和分布: {dist}')
+        print(f'卷积结果 >0 阈值化 == 3x3 膨胀: {same}')
+        print(f'卷积邻域和 == 9 的格数: {erode3}（3x3 腐蚀在示例图上的前景数）')
 
     print('\n生成图片：')
     for p in made:

@@ -57,6 +57,23 @@ def main():
         good = (alt == exp_alt and fg == exp_fg)
         ok = ok and good
         print(f'{"OK  " if good else "FAIL"} {name:26s} {w}x{h}  原图格数={alt}(应 {exp_alt})  结果格数={fg}(应 {exp_fg})   {desc}')
+    # 图5 是混合面板（二值 + 灰度 + 二值），单独核对
+    p5 = os.path.join(outdir, 'fig5_conv_vs_dilate.png')
+    if os.path.exists(p5):
+        w, h, rows = read_png(p5)
+        alt = sum(row.count(FG_ALT) for row in rows) // CELL_AREA
+        fg = sum(row.count(FG) for row in rows) // CELL_AREA
+        grays = {px for row in rows for px in row
+                 if px not in (FG, FG_ALT, (255, 255, 255), (238, 240, 243), (205, 210, 216))}
+        good = (alt == 16 and fg == 52 and len(grays) == 6)
+        ok = ok and good
+        print(f'{"OK  " if good else "FAIL"} {"fig5_conv_vs_dilate.png":26s} {w}x{h}  '
+              f'原图格数={alt}(应 16)  阈值化/膨胀格数={fg}(应 52)  灰度级数={len(grays)}(应 6)   '
+              f'卷积模糊 vs 形态学膨胀')
+    else:
+        print('缺少 fig5_conv_vs_dilate.png')
+        ok = False
+
     print('\n全部对账通过' if ok else '\n存在不一致')
     return 0 if ok else 1
 

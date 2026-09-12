@@ -1,6 +1,5 @@
-# 统一换行符，避免跨平台协作时脚本被写入 CRLF 导致 WSL 下报错
+# 统一换行符，避免跨平台协作时文件被写入 CRLF
 * text=auto
-*.sh    text eol=lf
 *.bat   text eol=crlf
 *.md    text eol=lf
 *.cpp   text eol=lf
